@@ -1,3 +1,4 @@
+const { BigNumber } = require("@ethersproject/bignumber");
 const { expect, assert } = require("chai");
 
 describe("Splitter contract", function () {
@@ -156,15 +157,35 @@ describe("Splitter contract", function () {
             
             let initialBalanceWei = ethers.utils.formatEther(await alice.getBalance());
 
-            const transactionHash = await alice.sendTransaction({
+            const transactionHash = await bob.sendTransaction({
                 to: contractInstance.address,
                 value: wei,
             });
 
-            await contractInstance.connect(alice).retrieveFunds(wei);
+            const receipt = await contractInstance.connect(alice).retrieveFunds(wei);
 
-            let finalBalanceWei = ethers.utils.formatEther(await alice.getBalance()) + await alice.getGasPrice();
-            expect(initialBalanceWei).to.equal(finalBalanceWei);
+            let finalBalanceWei = ethers.utils.formatEther(await alice.getBalance());
+            expect(parseFloat(initialBalanceWei)).to.be.lessThan(parseFloat(finalBalanceWei));
+        });
+
+        it("Retrieve funds with 2 accounts", async function () {
+            let totalShares = 10000;
+            await contractInstance.connect(alice).giveShares(bob.address, totalShares / 2);
+
+            let initialAliceWei = ethers.utils.formatEther(await alice.getBalance());
+            let initialBobWei = ethers.utils.formatEther(await bob.getBalance());
+
+            const transactionHash = await chuck.sendTransaction({
+                to: contractInstance.address,
+                value: ethers.utils.parseEther('1.0'),
+            });
+            const receiptAlice = await contractInstance.connect(alice).retrieveFunds( ethers.utils.parseEther("0.5") );
+            const receiptBob = await contractInstance.connect(bob).retrieveFunds( ethers.utils.parseEther("0.5") );
+
+            let finalAliceWei = ethers.utils.formatEther(await alice.getBalance());
+            let finalBobWei = ethers.utils.formatEther(await bob.getBalance());
+            expect(parseFloat(initialAliceWei)).to.be.lessThan(parseFloat(finalAliceWei));
+            expect(parseFloat(initialBobWei)).to.be.lessThan(parseFloat(finalBobWei));
         });
     });
 });
