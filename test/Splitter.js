@@ -82,7 +82,7 @@ describe("Splitter contract", function () {
             let aliceBalance = await contractInstance.getBalanceFor(alice.address);
             expect(aliceBalance).to.equal(halfWei);
 
-            let bobBalance = await contractInstance.getBalanceFor(alice.address);
+            let bobBalance = await contractInstance.getBalanceFor(bob.address);
             expect(bobBalance).to.equal(halfWei);
         });
 
