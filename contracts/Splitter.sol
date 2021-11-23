@@ -50,6 +50,10 @@ contract Splitter{
 
     
     uint private _totalShareholders;
+
+    /**
+     * @dev Iteration of the array should be done using _totalShareholders as size because we can have deleted account at the end of the container.
+     */
     ShareHolder[] private _shareholders;
 
     /**
@@ -61,37 +65,41 @@ contract Splitter{
     mapping (address => uint) private _addressToID;
 
     constructor() {
-        uint id = addShareholder(msg.sender,uint256(TOTAL_SHARES));
-        _addressToID[msg.sender] = id;
+        addShareholder(msg.sender,uint256(TOTAL_SHARES));
     }
 
     event Received(address, uint);
+    /**
+     * @dev function that performs the split after new funds are received, this is triggered automatically
+     * It will compute the value% for each shareholder and transfer that amount to a private balance.
+     * If there is any reminder that could not be split it will be left inside the bank.
+    */
     receive() external payable {
         uint256 prevBank = _bank;
         _bank += msg.value;
         require(_bank > prevBank);
-        emit Received(msg.sender, msg.value);
         split();
+
+        emit Received(msg.sender, msg.value);
     }
 
     function shareholderCount() public view returns (uint256) {
         return _totalShareholders;
     }
 
-    function getShareCountFor(address shareholderAdress) public view returns (uint256) {
-        uint id = _addressToID[shareholderAdress];
-        require(id > 0, "Address not used by any shareholder");
-        uint index = id - 1;
-        return _shareholders[index].shares;
+    function getSharesOwnedBy(address shareholderAdress) public view returns (uint256) {
+        return _shareholders[getIndexOfAddress(shareholderAdress)].shares;
     }
 
-    function getBalance(address shareholderAdress) public view returns (uint256) {
-        uint id = _addressToID[shareholderAdress];
-        require(id > 0, "Address not used by any shareholder");
-        uint index = id - 1;
-        return _shareholders[index].balance;
+    function getBalanceFor(address shareholderAdress) public view returns (uint256) {
+        return _shareholders[getIndexOfAddress(shareholderAdress)].balance;
     }
 
+    /**
+     * @dev function that performs the split after new funds are received, this is triggered automatically
+     * It will compute the value% for each shareholder and transfer that amount to a private balance.
+     * If there is any reminder that could not be split it will be left inside the bank.
+    */
     function split() private {
         uint totalSH = _totalShareholders;
         uint transferedFunds = 0;
@@ -99,7 +107,6 @@ contract Splitter{
         for (uint i=0; i<totalSH; ++i ){
             ShareHolder memory shareHolder = _shareholders[i];
             uint funds = (_bank / TOTAL_SHARES) * shareHolder.shares;
-            //console.log(funds);
             require(_bank >= funds);
             currentBank -= funds;
             shareHolder.balance += funds;
@@ -112,81 +119,86 @@ contract Splitter{
         _bank = currentBank;
     }
 
+    /**
+    * @dev simple retrieve funds that can be called by each shareholder
+    */
     function retrieveFunds(uint256 amount) external {
-        uint id = _addressToID[msg.sender];
-        require(id > 0, "Caller is not a share holder");
-        uint index = id - 1;
+        uint index = getIndexOfAddress(msg.sender);
         ShareHolder memory shareHolder = _shareholders[index];
         require(shareHolder.owner == msg.sender,"Hello there general Kenobi!");
         require(shareHolder.balance >= amount, "Caller is trying to retrieve more than his current balance");
-        uint currentBalance = shareHolder.balance;
         shareHolder.balance -= amount;
-        require(currentBalance > shareHolder.balance, "Something when critticaly wrong with the transaction, them underflows");
         _shareholders[index] = shareHolder;
         shareHolder.owner.transfer(amount);
     }
 
+    /**
+     * @dev function called by shareholders to send shares to another account. If there is no 
+     * account linked to the toAddress, a new account will be created.
+     * If the sending account gives away all it's shares it will be removed from the sharehodler list.
+    */
     function giveShares(address payable toAddress, uint256 amount) external {
-        uint id = _addressToID[msg.sender];
-        require(id > 0, "Caller is not a share holder");
+        require(toAddress != address(0), "Cannot give shares to the 0 adress");
         require(amount >= MIN_SHARE,"Invalid transaction amount");
-        uint fromIndex = id - 1;
 
+        uint fromIndex =  getIndexOfAddress(msg.sender);
         ShareHolder memory shareHolder = _shareholders[fromIndex];
-        uint shareHolderShares = shareHolder.shares;
-        require(amount <= shareHolderShares);
-        uint currentShares = shareHolderShares;
-        shareHolderShares = shareHolderShares - amount;
-        require(currentShares > shareHolderShares);
-        shareHolder.shares = shareHolderShares;
+        require(shareHolder.shares >= amount);
+        shareHolder.shares -= amount;
         _shareholders[fromIndex] = shareHolder;
 
         uint receiverId = _addressToID[toAddress];
+        //if the receiver does not have an account, create one.
         if(receiverId == 0){
             addShareholder(toAddress,amount);
         } else {
             uint receiverIndex = receiverId - 1;
             ShareHolder memory receiver = _shareholders[receiverIndex];
             uint receiverCurrent = receiver.shares;
-            uint newShares = receiverCurrent + amount;
-            require(newShares > receiverCurrent);
-            receiver.shares = newShares;
+            receiver.shares += amount;
+            require(receiver.shares > receiverCurrent, "Give share invalid transaction.");
             _shareholders[receiverIndex] = receiver;
         }
         
-        //console.log(shareHolderShares);
-        if(shareHolderShares == 0){
-            //console.log("no more shares detected, delete this user");
+        if(shareHolder.shares == 0){
             removeShareholder(shareHolder.owner);
         }
     }
 
+    /**
+     * @dev function that will add a new shareholder. 
+     * if the container has a free slot at the end, the function will use that slot
+     * if the container is full it will push a new item and the size will increase by 1.
+     * note: we can have empty slots at the end of the container when we have deleted users.
+    */
     function addShareholder(address payable shareholderAdress, uint256 amount ) private returns (uint) {
         uint currentTotal = _totalShareholders;
         if(currentTotal == _shareholders.length){
             _shareholders.push(ShareHolder(amount,0,shareholderAdress));
             currentTotal = _shareholders.length;
         } else {
-            ShareHolder memory newHolder = _shareholders[currentTotal];
-            newHolder = ShareHolder(amount,0,shareholderAdress);
+            _shareholders[currentTotal] = ShareHolder(amount,0,shareholderAdress);
             currentTotal += 1;
         }
 
-        require(currentTotal > _totalShareholders, "failed adding a new shareholder");
+        require(currentTotal > _totalShareholders, "failed to add a new shareholder");
         _totalShareholders = currentTotal;
         _addressToID[shareholderAdress] = currentTotal;
         
         return currentTotal;
     }
 
+    /* @dev function that will remove a shareholder
+     * the remove funtion will swap the deleted shareholder with the last item in the container
+     * and decrease the size by 1. 
+     * If the deleted account is the last then only the size decrease happens.
+    */
     function removeShareholder(address shareHolderAdress) private{
-        assert(_totalShareholders > 0);
+        assert(_totalShareholders > 1);
         require(msg.sender == shareHolderAdress, "Shareholders are removed only when they stop holding shares, this can only happen when you give away your shares");
         uint id = _addressToID[shareHolderAdress];
         require(id > 0, "Address must belong to a share holder");
 
-        //if we delete the last share owner, nothing needs to be done
-        //only swap when the removed item is inside the container
         if(_totalShareholders > id){
             uint index = id - 1;
             uint lastIndex = _totalShareholders - 1;
@@ -197,5 +209,14 @@ contract Splitter{
         
         _addressToID[shareHolderAdress] = 0;
         _totalShareholders -=  1;
+    }
+
+
+    /* @dev utility function to map addresses to indexes in the container
+    */
+    function getIndexOfAddress(address shareHolderAdress) private view returns(uint) {
+        uint id = _addressToID[shareHolderAdress];
+        require(id > 0, "Caller is not a share holder");
+        return id - 1;
     }
 }

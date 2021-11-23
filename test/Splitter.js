@@ -21,44 +21,28 @@ describe("Splitter contract", function () {
 
     describe("Deployment", function () {
         it("Contract creator should hold all the shares.", async function () {
-            expect(await contractInstance.totalShareholders()).to.equal(1);
-            let ownerId = await contractInstance.addressToID(alice.address);
-            expect(ownerId).to.equal(1);
-            let ownerIndex = ownerId - 1;
-            let account = await contractInstance.shareholders(ownerIndex);
-            expect(account.owner).to.equal(alice.address);
+            expect(await contractInstance.shareholderCount()).to.equal(1);
         });
 
         it("Create contract and split the shares equally between two users.", async function () {
             let totalShares = 10000;
             let halfShares = totalShares / 2;
             await contractInstance.giveShares(bob.address, halfShares);
-            expect(await contractInstance.totalShareholders()).to.equal(2);
-            let aliceId = await contractInstance.addressToID(alice.address);
-            let aliceIndex = aliceId - 1;
-            let aliceAccount = await contractInstance.shareholders(aliceIndex);
-            expect(aliceAccount.shares).to.equal(halfShares);
-            let bobId = await contractInstance.addressToID(bob.address);
-            let bobIndex = bobId - 1;
-            let bobAccount = await contractInstance.shareholders(bobIndex);
-            expect(aliceAccount.shares).to.equal(bobAccount.shares);
+            expect(await contractInstance.shareholderCount()).to.equal(2);
+            let aliceShares = await contractInstance.getSharesOwnedBy(alice.address);
+            expect(aliceShares).to.equal(halfShares);
+            let bobShares = await contractInstance.getSharesOwnedBy(bob.address);
+            expect(aliceShares).to.equal(bobShares);
         });
 
         it("Create contract and give all the shares to a second user", async function () {
             let totalShares = 10000;
-            expect(await contractInstance.totalShareholders()).to.equal(1);
+            expect(await contractInstance.shareholderCount()).to.equal(1);
             await contractInstance.connect(alice).giveShares(bob.address, totalShares);
-            expect(await contractInstance.totalShareholders()).to.equal(1);
+            expect(await contractInstance.shareholderCount()).to.equal(1);
             
-            let bobId = await contractInstance.addressToID(bob.address);
-            let bobIndex = bobId - 1;
-            let bobAccount = await contractInstance.shareholders(bobIndex);
-            
-            expect(bobAccount.shares).to.equal(totalShares);
-
-            let aliceId = await contractInstance.addressToID(alice.address);
-
-            expect(aliceId).to.equal(0);
+            let bobShares = await contractInstance.getSharesOwnedBy(bob.address);
+            expect(bobShares).to.equal(totalShares);
         });
 
         it("Create the contract and split the shares 4 way between alice, bob , chuck and david", async function () {
@@ -68,7 +52,7 @@ describe("Splitter contract", function () {
             await contractInstance.connect(alice).giveShares(chuck.address, splitShares / 2);
             await contractInstance.connect(bob).giveShares(david.address, splitShares / 2);
             let quarterShares = splitShares / 2;
-            expect(await contractInstance.totalShareholders()).to.equal(4);
+            expect(await contractInstance.shareholderCount()).to.equal(4);
         });
     });
 
@@ -80,10 +64,8 @@ describe("Splitter contract", function () {
                 value: wei,
             });
 
-            let aliceId = await contractInstance.addressToID(alice.address);
-            let aliceIndex = aliceId - 1;
-            let aliceAccount = await contractInstance.shareholders(aliceIndex);
-            expect(aliceAccount.balance).to.equal(wei);
+            let aliceBalance = await contractInstance.getBalanceFor(alice.address);
+            expect(aliceBalance).to.equal(wei);
         });
 
         it("Test payment with only two shareholders with 50-50 split", async function () {
@@ -97,15 +79,11 @@ describe("Splitter contract", function () {
                 value: wei,
             });
 
-            let aliceId = await contractInstance.addressToID(alice.address);
-            let aliceIndex = aliceId - 1;
-            let aliceAccount = await contractInstance.shareholders(aliceIndex);
-            expect(aliceAccount.balance).to.equal(halfWei);
+            let aliceBalance = await contractInstance.getBalanceFor(alice.address);
+            expect(aliceBalance).to.equal(halfWei);
 
-            let bobId = await contractInstance.addressToID(bob.address);
-            let bobIndex = bobId - 1;
-            let bobAccount = await contractInstance.shareholders(bobIndex);
-            expect(bobAccount.balance).to.equal(halfWei);
+            let bobBalance = await contractInstance.getBalanceFor(alice.address);
+            expect(bobBalance).to.equal(halfWei);
         });
 
         it("Test payment with three inequal shareholders that have 43-17-37-3", async function () {
@@ -113,7 +91,7 @@ describe("Splitter contract", function () {
             await contractInstance.connect(alice).giveShares(bob.address, (17*totalShares)/100);
             await contractInstance.connect(alice).giveShares(chuck.address, (37*totalShares)/100);
             await contractInstance.connect(alice).giveShares(david.address, (3*totalShares)/100);
-            expect(await contractInstance.totalShareholders()).to.equal(4);
+            expect(await contractInstance.shareholderCount()).to.equal(4);
 
             let wei = ethers.utils.parseEther('1.0'); // Sends exactly 1.0 ether
             let aliceShareWei = ethers.utils.parseEther('0.43');
@@ -125,35 +103,39 @@ describe("Splitter contract", function () {
                 value: wei,
             });
 
-            let aliceId = await contractInstance.addressToID(alice.address);
-            let aliceIndex = aliceId - 1;
-            let aliceAccount = await contractInstance.shareholders(aliceIndex);
-            expect(aliceAccount.shares).to.equal(43*100);
-            expect(aliceAccount.balance).to.equal(aliceShareWei);
+            expect(await contractInstance.getSharesOwnedBy(alice.address)).to.equal(43*100);
+            expect(await contractInstance.getBalanceFor(alice.address)).to.equal(aliceShareWei);
 
-            let bobId = await contractInstance.addressToID(bob.address);
-            let bobIndex = bobId - 1;
-            let bobAccount = await contractInstance.shareholders(bobIndex);
-            expect(bobAccount.shares).to.equal(17*100);
-            expect(bobAccount.balance).to.equal(bobShareWei);
+            expect(await contractInstance.getSharesOwnedBy(bob.address)).to.equal(17*100);
+            expect(await contractInstance.getBalanceFor(bob.address)).to.equal(bobShareWei);
 
-            let chuckId = await contractInstance.addressToID(chuck.address);
-            let chuckIndex = chuckId - 1;
-            let chuckAccount = await contractInstance.shareholders(chuckIndex);
-            expect(chuckAccount.shares).to.equal(37*100);
-            expect(chuckAccount.balance).to.equal(chuckShareWei);
+            expect(await contractInstance.getSharesOwnedBy(chuck.address)).to.equal(37*100);
+            expect(await contractInstance.getBalanceFor(chuck.address)).to.equal(chuckShareWei);
 
-            let davidId = await contractInstance.addressToID(david.address);
-            let davidIndex = davidId - 1;
-            let davidAccount = await contractInstance.shareholders(davidIndex);
-            expect(davidAccount.shares).to.equal(3*100);
-            expect(davidAccount.balance).to.equal(davidShareWei);
+            expect(await contractInstance.getSharesOwnedBy(david.address)).to.equal(3*100);
+            expect(await contractInstance.getBalanceFor(david.address)).to.equal(davidShareWei);
         });
     });
 
     describe("Retrieving funds", function () {
         it("Retrieve for a single account", async function () {
             let wei = ethers.utils.parseEther('1.0'); // Sends exactly 1.0 ether
+            
+            let initialBalanceWei = ethers.utils.formatEther(await alice.getBalance());
+
+            const transactionHash = await bob.sendTransaction({
+                to: contractInstance.address,
+                value: wei,
+            });
+
+            const receipt = await contractInstance.connect(alice).retrieveFunds(wei);
+
+            let finalBalanceWei = ethers.utils.formatEther(await alice.getBalance());
+            expect(parseFloat(initialBalanceWei)).to.be.lessThan(parseFloat(finalBalanceWei));
+        });
+
+        it("Retrieve for a single account, big funds", async function () {
+            let wei = ethers.utils.parseEther('9900.0');
             
             let initialBalanceWei = ethers.utils.formatEther(await alice.getBalance());
 
