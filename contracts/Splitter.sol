@@ -58,10 +58,10 @@ contract Splitter{
     mapping (address => uint) private _addressToID;
 
     constructor() {
-        addShareholder(msg.sender, TOTAL_SHARES);
+        //the first account will be created with address(0) as it's parent.
+        addShareholder(msg.sender,address(0), TOTAL_SHARES);
     }
 
-    event Received(address, uint);
     /**
      * @dev function that performs the split after new funds are received, this is triggered automatically
      * It will compute the value% for each shareholder and transfer that amount to a private balance.
@@ -70,7 +70,6 @@ contract Splitter{
     receive() external payable {
         _bank += msg.value;
         split();
-        emit Received(msg.sender, msg.value);
     }
 
     function shareholderCount() public view returns (uint256) {
@@ -104,6 +103,7 @@ contract Splitter{
             currentBank -= funds;
             shareHolder.balance += funds;
             _shareholders[i] = shareHolder;
+            emit FundsReceived(shareHolder.owner,funds);
         }
 
         _bank = currentBank;
@@ -140,7 +140,7 @@ contract Splitter{
         uint receiverId = _addressToID[toAddress];
         //if the receiver does not have an account, create one.
         if(receiverId == 0){
-            addShareholder(toAddress,amount);
+            addShareholder(toAddress, msg.sender, amount);
         } else {
             uint receiverIndex = receiverId - 1;
             ShareHolder memory receiver = _shareholders[receiverIndex];
@@ -159,7 +159,7 @@ contract Splitter{
      * if the container is full it will push a new item and the size will increase by 1.
      * note: we can have empty slots at the end of the container when we have deleted users.
     */
-    function addShareholder(address shareholderAddress, uint256 amount ) private {
+    function addShareholder(address shareholderAddress,address parent, uint256 amount ) private {
         if(_shareholdersCount == _shareholders.length){
             _shareholders.push(ShareHolder({shares:amount,balance:0, owner:shareholderAddress}));
         } else {
@@ -168,6 +168,7 @@ contract Splitter{
 
         _shareholdersCount += 1;
         _addressToID[shareholderAddress] = _shareholdersCount;
+        emit ShareholderAdded(shareholderAddress,parent,amount);
     }
 
     /* @dev function that will remove a shareholder

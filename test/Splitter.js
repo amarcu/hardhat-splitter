@@ -22,12 +22,15 @@ describe("Splitter contract", function () {
     describe("Deployment", function () {
         it("Contract creator should hold all the shares.", async function () {
             expect(await contractInstance.shareholderCount()).to.equal(1);
+
         });
 
         it("Create contract and split the shares equally between two users.", async function () {
             let totalShares = 10000;
             let halfShares = totalShares / 2;
-            await contractInstance.giveShares(bob.address, halfShares);
+            
+            await expect(await contractInstance.giveShares(bob.address, halfShares)).to.emit(contractInstance, 'ShareholderAdded').withArgs(bob.address, alice.address, halfShares);
+
             expect(await contractInstance.shareholderCount()).to.equal(2);
             let aliceShares = await contractInstance.getSharesOwnedBy(alice.address);
             expect(aliceShares).to.equal(halfShares);
@@ -59,10 +62,11 @@ describe("Splitter contract", function () {
     describe("Payments", function () {
         it("Test payment with only one shareholder", async function () {
             let wei = ethers.utils.parseEther('1.0'); // Sends exactly 1.0 ether
-            const transactionHash = await alice.sendTransaction({
+
+            await expect(await alice.sendTransaction({
                 to: contractInstance.address,
                 value: wei,
-            });
+            })).to.emit(contractInstance, 'FundsReceived').withArgs(alice.address, wei);
 
             let aliceBalance = await contractInstance.getBalanceFor(alice.address);
             expect(aliceBalance).to.equal(wei);
